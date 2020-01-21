@@ -1,0 +1,11 @@
+target
+.idea/
+*.iml
+*.log
+*.tsv
+*.lck
+*.png
+*.out
+*.orig
+__pycache__
+.ipynb_checkpoints
