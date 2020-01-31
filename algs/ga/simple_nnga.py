@@ -41,7 +41,23 @@ class SimpleNNGA:
             sol1, sol2 = sol2, sol1
         c1 = np.zeros(l1)
         c2 = np.zeros(l2)
-
+        idx = rnd.randint(l2)
+        for i in range(idx):
+            c1[i] = sol1[i]
+            c2[i] = sol2[i]
+        for i in range(idx, l2):
+            c1[i] = sol2[i]
+            c2[i] = sol1[i]
+        for i in range(l2, l1):
+            c1[i] = sol1[i]
+        return c1, c2
 
 if __name__ == "__main__":
-    alg
+    alg = SimpleNNGA(5, [16, 32, 64, 128, 256])
+    s1 = alg.individual()
+    s2 = alg.individual()
+    s3 = alg.individual()
+    alg.mutation(s3)
+    c1, c2 = alg.crossover(s1, s2)
+
+    #todo evaluate...
