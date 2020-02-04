@@ -1,23 +1,4 @@
 from deap import base
-
-
-class CartPoleProblem:
-    def __init__(self):
-        self.name = "cartpole"
-        self.input_dim = 4
-
-
-    def evaluate(self, solution):
-        result = 0.0
-        rwd = self.launch(solution)
-        result += rwd
-        return result
-
-    def launch(self, solution):
-        agent = None
-        return 0.0
-
-
 import random
 import gym
 import math
@@ -28,12 +9,34 @@ from keras.layers import Dense
 from keras.optimizers import Adam
 
 
-class DQNCartPoleSolver():
-    def __init__(self, n_episodes=1000, n_win_ticks=195, max_env_steps=None, gamma=1.0, epsilon=1.0, epsilon_min=0.01,
-                 epsilon_log_decay=0.995, alpha=0.01, alpha_decay=0.01, batch_size=64, monitor=False, quiet=False):
+class CartPoleProblem:
+    def __init__(self):
+        self.name = "cartpole"
+        self.input_dim = 4
+
+
+    def evaluate(self, solution, title=""):
+        print("solution {} {}".format(solution, title))
+        result = 0.0
+        for i in range(4):
+            rwd = self.launch(solution)
+            # print("launch result = {}".format(rwd))
+            result += rwd
+        print("result = {}".format(result))
+        return result,
+
+    def launch(self, solution):
+        agent = DQNAgent(solution=solution)
+        return agent.run()
+
+
+class DQNAgent():
+    def __init__(self, solution=[24, 48], n_episodes=100, n_win_ticks=195, max_env_steps=None, gamma=1.0, epsilon=1.0, epsilon_min=0.01,
+                 epsilon_log_decay=0.995, alpha=0.01, alpha_decay=0.01, batch_size=64, monitor=False, quiet=True):
         self.memory = deque(maxlen=100000)
         self.env = gym.make('CartPole-v0')
-        if monitor: self.env = gym.wrappers.Monitor(self.env, '../data/cartpole-1', force=True)
+        if monitor:
+            self.env = gym.wrappers.Monitor(self.env, '../data/cartpole-1', force=True)
         self.gamma = gamma
         self.epsilon = epsilon
         self.epsilon_min = epsilon_min
@@ -44,12 +47,16 @@ class DQNCartPoleSolver():
         self.n_win_ticks = n_win_ticks
         self.batch_size = batch_size
         self.quiet = quiet
-        if max_env_steps is not None: self.env._max_episode_steps = max_env_steps
+        if max_env_steps is not None:
+            self.env._max_episode_steps = max_env_steps
 
         # Init model
         self.model = Sequential()
-        self.model.add(Dense(24, input_dim=4, activation='tanh'))
-        self.model.add(Dense(48, activation='tanh'))
+        for layer in range(len(solution)):
+            if layer == 0:
+                self.model.add(Dense(solution[layer], input_dim=4, activation='tanh'))
+            else:
+                self.model.add(Dense(solution[layer], activation='tanh'))
         self.model.add(Dense(2, activation='linear'))
         self.model.compile(loss='mse', optimizer=Adam(lr=self.alpha, decay=self.alpha_decay))
 
@@ -81,13 +88,14 @@ class DQNCartPoleSolver():
             self.epsilon *= self.epsilon_decay
 
     def run(self):
-        scores = deque(maxlen=100)
+        scores = list()
 
         for e in range(self.n_episodes):
             state = self.preprocess_state(self.env.reset())
             done = False
             i = 0
             while not done:
+                # self.env.render()
                 action = self.choose_action(state, self.get_epsilon(e))
                 next_state, reward, done, _ = self.env.step(action)
                 next_state = self.preprocess_state(next_state)
@@ -96,19 +104,8 @@ class DQNCartPoleSolver():
                 i += 1
 
             scores.append(i)
-            mean_score = np.mean(scores)
-            if mean_score >= self.n_win_ticks and e >= 100:
-                if not self.quiet: print('Ran {} episodes. Solved after {} trials ✔'.format(e, e - 100))
-                return e - 100
-            if e % 100 == 0 and not self.quiet:
-                print('[Episode {}] - Mean survival time over last 100 episodes was {} ticks.'.format(e, mean_score))
-
             self.replay(self.batch_size)
-
-        if not self.quiet: print('Did not solve after {} episodes 😞'.format(e))
-        return e
-
-
-if __name__ == '__main__':
-    agent = DQNCartPoleSolver()
-    agent.run()
+        self.env.close()
+        scores = np.array(scores)
+        scores = scores[-10:]
+        return np.mean(scores)
