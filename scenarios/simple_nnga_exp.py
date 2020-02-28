@@ -14,7 +14,7 @@ creator.create("Individual", np.ndarray, fitness=creator.BaseFitness)
 class SimpleNNGAExperiment:
     def __init__(self, problem):
         self.pop_size = 10
-        self.iterations = 50
+        self.iterations = 20
         self.mut_prob = 0.3
         self.cross_prob = 0.3
 
@@ -23,8 +23,9 @@ class SimpleNNGAExperiment:
 
         alg = SimpleNNGA(5, [16, 32, 64, 128, 256])
 
+        self.pool = Pool(5)
         self.engine = base.Toolbox()
-        self.engine.register("map", map)
+        self.engine.register("map", self.pool.map)
 
         self.engine.register("individual", tools.initIterate, creator.Individual, alg.individual)
         self.engine.register("population", tools.initRepeat, list, self.engine.individual, self.pop_size)

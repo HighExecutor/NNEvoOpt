@@ -7,12 +7,13 @@ from collections import deque
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.optimizers import Adam
-
+from deap import creator
 
 class CartPoleProblem:
     def __init__(self):
         self.name = "cartpole"
         self.input_dim = 4
+
 
 
     def evaluate(self, solution, title=""):
@@ -32,8 +33,8 @@ class CartPoleProblem:
 
 class DQNAgent():
     def __init__(self, solution=[24, 48], n_episodes=100, n_win_ticks=195, max_env_steps=None, gamma=1.0, epsilon=1.0, epsilon_min=0.01,
-                 epsilon_log_decay=0.995, alpha=0.01, alpha_decay=0.01, batch_size=64, monitor=False, quiet=True):
-        self.memory = deque(maxlen=100000)
+                 epsilon_log_decay=0.995, alpha=0.01, alpha_decay=0.01, batch_size=64, monitor=False, quiet=True, render=False):
+        self.memory = deque(maxlen=1000)
         self.env = gym.make('CartPole-v0')
         if monitor:
             self.env = gym.wrappers.Monitor(self.env, '../data/cartpole-1', force=True)
@@ -47,6 +48,7 @@ class DQNAgent():
         self.n_win_ticks = n_win_ticks
         self.batch_size = batch_size
         self.quiet = quiet
+        self.render = render
         if max_env_steps is not None:
             self.env._max_episode_steps = max_env_steps
 
@@ -95,7 +97,8 @@ class DQNAgent():
             done = False
             i = 0
             while not done:
-                # self.env.render()
+                if self.render:
+                    self.env.render()
                 action = self.choose_action(state, self.get_epsilon(e))
                 next_state, reward, done, _ = self.env.step(action)
                 next_state = self.preprocess_state(next_state)
@@ -109,3 +112,7 @@ class DQNAgent():
         scores = np.array(scores)
         scores = scores[-10:]
         return np.mean(scores)
+
+if __name__ == "__main__":
+    agent = DQNAgent(solution=[32,16,8], batch_size=32, render=True)
+    print(agent.run())
