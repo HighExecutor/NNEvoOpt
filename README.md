@@ -1,2 +1,2 @@
 # NNEvoOpt
-Evolutionary Optimization for Neural Network structure
+Optimization of Neural Networks for Reinforcement Learning problems by using evolutionary approaches.
