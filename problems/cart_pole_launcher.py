@@ -39,7 +39,7 @@ class CartPoleLauncher:
 
 
 
-    def episode(self, model, timestamps=1):
+    def episode(self, model, timestamps=1, render=True):
         total_reward = 0
         t = 0
         max_steps = 300
@@ -54,7 +54,8 @@ class CartPoleLauncher:
 
         while t < max_steps:
             t += 1
-            self.env.render()
+            if render:
+                self.env.render()
             Qs = None
             if timestamps == 1:
                 Qs = model.predict(np.array(state))[0]
@@ -67,5 +68,5 @@ class CartPoleLauncher:
             state.append(new_state)
 
             if done:
-                print('Total reward: {}'.format(total_reward))
+                # print('Total reward: {}'.format(total_reward))
                 return total_reward

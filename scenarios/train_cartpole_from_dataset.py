@@ -9,8 +9,9 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import gym
-from problems .cart_pole_launcher import CartPoleLauncher
+from problems.cart_pole_launcher import CartPoleLauncher
 from collections import deque
+
 
 def build_model():
     model = Sequential()
@@ -18,7 +19,6 @@ def build_model():
     model.add(Dense(16, activation='relu'))
     model.add(Dense(8, activation='relu'))
     model.add(Dense(2, activation='linear'))
-    # model.compile(loss="mse", optimizer="adam", metrics=['accuracy'])
     model.compile(loss="mse", optimizer="adam", metrics=['accuracy'])
     model_name = "cartpole_random"
     print(model.summary())
@@ -27,10 +27,9 @@ def build_model():
 
 def build_rnn_model():
     model = Sequential()
-    model.add(SimpleRNN(10, input_dim=4, activation='relu'))
+    model.add(SimpleRNN(12, input_dim=4, activation='relu'))
     model.add(Dense(2, activation='linear'))
-    # model.compile(loss="mse", optimizer="adam", metrics=['accuracy'])
-    model.compile(loss="mse", optimizer="adam", metrics=['accuracy', 'categorical_accuracy'])
+    model.compile(loss="mse", optimizer="adam", metrics=['accuracy'])
     model_name = "cartpole_rnn_random"
     print(model.summary())
     return model, model_name
@@ -80,10 +79,9 @@ def plot_history(history):
     plt.legend(['train', 'test'], loc='upper left')
 
     plt.subplot(133)
-    plt.plot(history['categorical_accuracy'])
-    plt.plot(history['val_categorical_accuracy'])
-    plt.title('categorical_accuracy')
-    plt.ylabel('categorical_accuracy')
+    plt.plot(history['reward'])
+    plt.title('cartpole_evaluation')
+    plt.ylabel('cartpole_evaluation')
     plt.xlabel('epoch')
     plt.legend(['train', 'test'], loc='upper left')
 
@@ -97,16 +95,15 @@ def learn_model(data_path, timestamps=1):
         model, model_name = build_model()
     else:
         model, model_name = build_rnn_model()
+
     action_size = 2
     input_shape = list(model.input_shape)[1:]
     state_size = input_shape[-1]
-    # if len(input_shape) > 1:
-    #     timestamps = input_shape[0]
 
-    data = pd.read_csv(data_path, header=None, skiprows=1, names=np.arange(0,85,1)).values
-    ep_ids = data[:, 0] # id of episodes
-    states = data[:, 1:1+state_size] # x_data
-    actions = data[:,state_size+1:state_size+action_size+1] # t_data
+    data = pd.read_csv(data_path, header=None, skiprows=1, names=np.arange(0, 85, 1)).values
+    ep_ids = data[:, 0]  # id of episodes
+    states = data[:, 1:1 + state_size]  # x_data
+    actions = data[:, state_size + 1:state_size + action_size + 1]  # t_data
     data_size = len(states)
     del data
 
@@ -132,22 +129,21 @@ def learn_model(data_path, timestamps=1):
     del actions
 
     plt.ion()
-    epochs = 200
+    epochs = 100
     history = dict()
     history['val_loss'] = list()
     history['loss'] = list()
     history['acc'] = list()
     history['val_acc'] = list()
-    history['val_categorical_accuracy'] = list()
-    history['categorical_accuracy'] = list()
+    history['reward'] = list()
     for e in range(epochs):
         e_history = model.fit(x_train, y_train, batch_size=128, epochs=1, validation_data=(x_test, y_test), verbose=1)
+        reward = test_episode_cartpole_model(model, timestamps)
         history['val_loss'].append(e_history.history['val_loss'][0])
         history['loss'].append(e_history.history['loss'][0])
         history['acc'].append(e_history.history['acc'][0])
         history['val_acc'].append(e_history.history['val_acc'][0])
-        history['val_categorical_accuracy'].append(e_history.history['val_categorical_accuracy'][0])
-        history['categorical_accuracy'].append(e_history.history['categorical_accuracy'][0])
+        history['reward'].append(reward)
         plot_history(history)
 
     save_model(model, model_name)
@@ -158,20 +154,26 @@ def learn_model(data_path, timestamps=1):
     pass
 
 
-def test_cartpole_model(model_path, timestamps=1):
-    model = load_model(model_path)
-    cartpole = CartPoleLauncher()
+cartpole = CartPoleLauncher()
+def test_cartpole_model(model_path, timestamps=1, model=None):
+    if model is None:
+        model = load_model(model_path)
     cartpole.episodes(model, 20, timestamps)
+
+
+def test_episode_cartpole_model(model, timestamps=1):
+    return cartpole.episode(model, timestamps, render=False)
 
 
 def model_evaluation():
     model = load_model("test_model")
     print(model.summary())
 
+
 if __name__ == "__main__":
     data_path = "C:\\wspace\\data\\nn_tests\\cartpole_sarsa_g9.csv"
 
-    timestamps=2
+    timestamps = 4
     if timestamps == 1:
         model_path = "cartpole_random"
     else:
