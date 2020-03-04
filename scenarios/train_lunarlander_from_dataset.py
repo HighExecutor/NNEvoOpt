@@ -9,27 +9,27 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import gym
-from problems.cart_pole_launcher import CartPoleLauncher
+from problems.lunar_lander_launcher import LunarLanderLauncher
 from collections import deque
 
 
 def build_model():
     model = Sequential()
-    model.add(Dense(24, input_dim=4, activation='relu'))
-    model.add(Dense(24, activation='relu'))
-    model.add(Dense(2, activation='linear'))
-    model.compile(loss="mse", optimizer="adam", metrics=['accuracy'])
-    model_name = "cartpole_random"
+    model.add(Dense(150, input_dim=8, activation='relu'))
+    model.add(Dense(120, activation='relu'))
+    model.add(Dense(4, activation='linear'))
+    model.compile(loss="categorical_crossentropy", optimizer="adam", metrics=['accuracy'])
+    model_name = "lunarlander_random"
     print(model.summary())
     return model, model_name
 
 
 def build_rnn_model():
     model = Sequential()
-    model.add(SimpleRNN(12, input_dim=4, activation='relu'))
-    model.add(Dense(2, activation='linear'))
+    model.add(SimpleRNN(20, input_dim=8, activation='relu'))
+    model.add(Dense(4, activation='linear'))
     model.compile(loss="mse", optimizer="adam", metrics=['accuracy'])
-    model_name = "cartpole_rnn_random"
+    model_name = "lunarlander_rnn_random"
     print(model.summary())
     return model, model_name
 
@@ -79,8 +79,8 @@ def plot_history(history):
 
     plt.subplot(133)
     plt.plot(history['reward'])
-    plt.title('cartpole_evaluation')
-    plt.ylabel('cartpole_evaluation')
+    plt.title('evaluation')
+    plt.ylabel('evaluation')
     plt.xlabel('epoch')
     plt.legend(['train', 'test'], loc='upper left')
 
@@ -95,11 +95,11 @@ def learn_model(data_path, timestamps=1):
     else:
         model, model_name = build_rnn_model()
 
-    action_size = 2
     input_shape = list(model.input_shape)[1:]
     state_size = input_shape[-1]
+    action_size = list(model.output_shape)[-1]
 
-    data = pd.read_csv(data_path, header=None, skiprows=1, names=np.arange(0, 7, 1)).values
+    data = pd.read_csv(data_path, header=None, skiprows=1, names=np.arange(0, 13, 1)).values
     ep_ids = data[:, 0]  # id of episodes
     states = data[:, 1:1 + state_size]  # x_data
     actions = data[:, state_size + 1:state_size + action_size + 1]  # t_data
@@ -137,7 +137,7 @@ def learn_model(data_path, timestamps=1):
     history['reward'] = list()
     for e in range(epochs):
         e_history = model.fit(x_train, y_train, batch_size=128, epochs=1, validation_data=(x_test, y_test), verbose=1)
-        reward = test_episode_cartpole_model(model, timestamps)
+        reward = test_episode_lunarlander_model(model, timestamps)
         history['val_loss'].append(e_history.history['val_loss'][0])
         history['loss'].append(e_history.history['loss'][0])
         history['acc'].append(e_history.history['acc'][0])
@@ -153,15 +153,15 @@ def learn_model(data_path, timestamps=1):
     pass
 
 
-cartpole = CartPoleLauncher()
-def test_cartpole_model(model_path, timestamps=1, model=None):
+lunarlander = LunarLanderLauncher()
+def test_lunarlander_model(model_path, timestamps=1, model=None):
     if model is None:
         model = load_model(model_path)
-    cartpole.episodes(model, 20, timestamps)
+    lunarlander.episodes(model, 20, timestamps)
 
 
-def test_episode_cartpole_model(model, timestamps=1):
-    return cartpole.episode(model, timestamps, render=False)
+def test_episode_lunarlander_model(model, timestamps=1):
+    return lunarlander.episode(model, timestamps, render=False)
 
 
 def model_evaluation():
@@ -170,12 +170,12 @@ def model_evaluation():
 
 
 if __name__ == "__main__":
-    data_path = "C:\\wspace\\data\\nn_tests\\cartpole_sarsa_g9.csv"
+    data_path = "C:\\wspace\\data\\nn_tests\\lunarlander_sarsa_g9.csv"
 
-    timestamps = 3
+    timestamps = 1
     if timestamps == 1:
-        model_path = "cartpole_random"
+        model_path = "lunarlander_random"
     else:
-        model_path = "cartpole_rnn_random"
+        model_path = "lunarlander_rnn_random"
     learn_model(data_path, timestamps)
-    test_cartpole_model(model_path, timestamps)
+    test_lunarlander_model(model_path, timestamps)
