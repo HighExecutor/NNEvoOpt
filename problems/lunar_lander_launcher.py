@@ -42,7 +42,7 @@ class LunarLanderLauncher:
     def episode(self, model, timestamps=1, render=True):
         total_reward = 0
         t = 0
-        max_steps = 300
+        max_steps = 1000
         input_shape = list(model.input_shape)[1:]
         statesize = input_shape[-1]
         # if len(input_shape) > 1:

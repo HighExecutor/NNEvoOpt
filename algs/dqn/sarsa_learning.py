@@ -8,6 +8,7 @@ from copy import deepcopy
 from keras.layers import Dense, SimpleRNN, LSTM
 from keras.models import Sequential
 from keras.models import model_from_json
+from keras.optimizers import adam
 
 
 def plot_durations(rewards, means):
@@ -27,13 +28,13 @@ class DQNAgent:
         self.memory = deque(maxlen=self.memory_size)
         self.gamma = 0.9  # future reward discount
         # Exploration parameters
-        self.explore_start = 0.002  # exploration probability at start
+        self.explore_start = 0.6  # exploration probability at start
         self.explore_stop = 0.001  # minimum exploration probability
-        self.explore_steps = 100  # exponential decay rate for exploration prob
+        self.explore_steps = 300  # exponential decay rate for exploration prob
         self.explore_decay = (self.explore_start - self.explore_stop) / self.explore_steps
         self.explore = self.explore_start
         # Memory parameters
-        self.batch_size = 2048
+        self.batch_size = 256
         self.model = model
         self.action_size = list(model.output_shape)[-1]
         self.state_size = list(model.input_shape)[-1]
@@ -62,16 +63,18 @@ class DQNAgent:
         if len(self.memory) < self.batch_size:
             return
         # Replay
-        inputs = np.zeros((self.batch_size, self.state_size))
+        if self.timestamps == 1:
+            inputs = np.zeros((self.batch_size, self.state_size))
+        else:
+            inputs = np.zeros((self.batch_size, self.timestamps, self.state_size))
         targets = np.zeros((self.batch_size, self.action_size))
-
         minibatch = self.sample()
-        for i, (state_b, action_b, reward_b, next_state_b) in enumerate(minibatch):
+        for i, (state_b, action_b, reward_b, next_state_b, done) in enumerate(minibatch):
             inputs[i:i + 1] = state_b
             target = reward_b
-            if not (next_state_b == np.zeros(state_b.shape)).all(axis=1):
+            if not (next_state_b == np.zeros(state_b.shape)).all():
                 target_Q = self.model.predict(next_state_b)[0]
-                target = reward_b + self.gamma * np.amax(target_Q)
+                target = reward_b + self.gamma * np.amax(target_Q) * (1-done)
             targets[i] = self.model.predict(state_b)
             targets[i][action_b] = target
         self.model.fit(inputs, targets, epochs=1, verbose=0)
@@ -83,7 +86,8 @@ class DQNAgent:
                                replace=False)
         return [self.memory[ii] for ii in idx]
 
-    def load_data(self, data_path, timestamps=1):
+    def load_data(self, data_path):
+        timestamps = self.timestamps
         state_size = self.state_size
         action_size = self.action_size
         data = pd.read_csv(data_path, header=None, skiprows=1,
@@ -107,30 +111,27 @@ class DQNAgent:
                     cur_ep_id = ep_id
                 state.append(states[i])
                 states_shaped[i] = np.array(state)
-                del states
-                states = states_shaped
-                del states_shaped
+            del states
+            states = states_shaped
+            del states_shaped
 
         sarsa = list()
         sample_ids = rnd.choice(np.arange(len(ep_ids) - 1), min(self.memory_size, len(ep_ids) - 1))
 
         for idx in sample_ids:
-            state = deque(maxlen=timestamps)
+            state = deque(maxlen=1)
             cur_ep_id = ep_ids[idx]
-            if cur_ep_id != ep_ids[idx + 1]:
-                continue
-            for j in range(idx - timestamps + 1, idx):
-                if j < 0 or ep_ids[j] != cur_ep_id:
-                    state.append(np.zeros(self.state_size))
-                else:
-                    state.append(states(j))
+
             state.append(states[idx])
             act = np.argmax(actions[idx])
             rwd = actions[idx][act]
             cur_state = np.array(state)
+            if cur_ep_id != ep_ids[idx + 1]:
+                sarsa.append((cur_state, act, rwd, np.zeros(shape=cur_state.shape), True))
+                continue
             state.append(states[idx + 1])
             next_state = np.array(state)
-            sarsa.append((cur_state, act, rwd, next_state))
+            sarsa.append((cur_state, act, rwd, next_state, False))
         for s in sarsa:
             self.remember(s)
 
@@ -138,9 +139,9 @@ class DQNAgent:
 
 
 def learning_episodes(env, model, dataset=None, n=100, timestamps=1):
-    agent = DQNAgent(model)
+    agent = DQNAgent(model, timestamps)
     if dataset is not None:
-        agent.load_data(dataset, timestamps=timestamps)
+        agent.load_data(dataset)
     rewards = list()
     means = list()
 
@@ -170,7 +171,7 @@ def episode(env, agent, timestamps=1, render=True):
 
     total_reward = 0
     t = 0
-    max_steps = 300
+    max_steps = 2000
     while t < max_steps:
         t += 1
         if render:
@@ -182,7 +183,10 @@ def episode(env, agent, timestamps=1, render=True):
         total_reward += reward
         cur_state = np.array(state)
         state.append(new_state)
-        agent.remember((cur_state, action, reward, np.array(state)))
+        if timestamps == 1:
+            agent.remember((cur_state, action, reward, np.array(state), done))
+        else:
+            agent.remember((cur_state.reshape((1, timestamps, state_size)), action, reward, np.array(state).reshape((1, timestamps, state_size)), done))
 
         if done:
             # print('Total reward: {}'.format(total_reward))
@@ -190,30 +194,32 @@ def episode(env, agent, timestamps=1, render=True):
     return total_reward
 
 
-def build_model():
+def build_model(input, output):
     model = Sequential()
-    model.add(Dense(20, input_dim=4, activation='relu'))
-    model.add(Dense(2, activation='linear'))
-    model.compile(loss="mse", optimizer="adam", metrics=['accuracy'])
+    model.add(Dense(150, input_dim=input, activation='relu'))
+    model.add(Dense(120, activation='relu'))
+    model.add(Dense(output, activation='linear'))
+    model.compile(loss="mse", optimizer=adam(), metrics=['accuracy'])
     print(model.summary())
     return model
 
 
-def build_rnn_model():
+def build_rnn_model(input, output):
     model = Sequential()
-    model.add(SimpleRNN(20, input_dim=4, activation='relu'))
-    model.add(Dense(2, activation='linear'))
+    model.add(SimpleRNN(64, input_dim=input, activation='relu'))
+    model.add(Dense(output, activation='linear'))
     model.compile(loss="mse", optimizer="adam", metrics=['accuracy'])
     print(model.summary())
     return model
 
 
 def load_model(name):
-    file_path = "D:\\wspace\\data\\nn_tests\\"
+    file_path = "C:\\wspace\\data\\nn_tests\\"
     json_file = open("{}{}.json".format(file_path, name), 'r')
     loaded_model_json = json_file.read()
     json_file.close()
     loaded_model = model_from_json(loaded_model_json)
+    loaded_model.compile(loss="mse", optimizer="adam", metrics=['accuracy'])
     # load weights into new model
     loaded_model.load_weights("{}{}.h5".format(file_path, name))
     print("Loaded model from disk")
@@ -221,16 +227,21 @@ def load_model(name):
 
 
 if __name__ == "__main__":
-    # env = gym.make("LunarLander-v2")
-    env = gym.make("CartPole-v0")
-    model_name = "cartpole_random"
+    env = gym.make("LunarLander-v2")
+    # env = gym.make("CartPole-v0")
+    input = 8
+    output = 4
+
     timestamps = 1
     if timestamps == 1:
-        model = build_model()
-        # model = load_model(model_name)
+        # model = build_model(input, output)
+        model_name = "lunarlander_random"
+        model = load_model(model_name)
     else:
-        model = build_rnn_model()
-        # model = load_model(model_name)
-    dataset = "D:\\data\\cartpole_sarsa_g9.csv"
+        # model = build_rnn_model(input, output)
+        model_name = "lunarlander_rnn_random"
+        model = load_model(model_name)
+    # dataset = "C:\\wspace\\data\\nn_tests\\cartpole_sarsa_g9.csv"
+    dataset = "C:\\wspace\\data\\nn_tests\\lunarlander_sarsa_g9.csv"
     # dataset = None
     learning_episodes(env, model, timestamps=timestamps, dataset=dataset, n=10000)

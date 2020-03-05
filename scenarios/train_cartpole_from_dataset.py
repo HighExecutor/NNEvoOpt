@@ -51,6 +51,7 @@ def load_model(name):
     loaded_model_json = json_file.read()
     json_file.close()
     loaded_model = model_from_json(loaded_model_json)
+    loaded_model.compile(loss="mse", optimizer="adam", metrics=['accuracy'])
     # load weights into new model
     loaded_model.load_weights("{}{}.h5".format(file_path, name))
     print("Loaded model from disk")
@@ -172,7 +173,7 @@ def model_evaluation():
 if __name__ == "__main__":
     data_path = "C:\\wspace\\data\\nn_tests\\cartpole_sarsa_g9.csv"
 
-    timestamps = 3
+    timestamps = 4
     if timestamps == 1:
         model_path = "cartpole_random"
     else:

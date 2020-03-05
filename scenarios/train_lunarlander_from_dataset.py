@@ -128,7 +128,7 @@ def learn_model(data_path, timestamps=1):
     del actions
 
     plt.ion()
-    epochs = 100
+    epochs = 300
     history = dict()
     history['val_loss'] = list()
     history['loss'] = list()
