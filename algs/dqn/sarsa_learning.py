@@ -27,13 +27,13 @@ class DQNAgent:
         self.memory = deque(maxlen=self.memory_size)
         self.gamma = 0.9  # future reward discount
         # Exploration parameters
-        self.explore_start = 0.1  # exploration probability at start
+        self.explore_start = 0.002  # exploration probability at start
         self.explore_stop = 0.001  # minimum exploration probability
         self.explore_steps = 100  # exponential decay rate for exploration prob
         self.explore_decay = (self.explore_start - self.explore_stop) / self.explore_steps
         self.explore = self.explore_start
         # Memory parameters
-        self.batch_size = 10000
+        self.batch_size = 2048
         self.model = model
         self.action_size = list(model.output_shape)[-1]
         self.state_size = list(model.input_shape)[-1]
@@ -77,18 +77,17 @@ class DQNAgent:
         self.model.fit(inputs, targets, epochs=1, verbose=0)
         self.converge_explore()
 
-
     def sample(self):
         idx = np.random.choice(np.arange(len(self.memory)),
                                size=self.batch_size,
                                replace=False)
         return [self.memory[ii] for ii in idx]
 
-
-    def load_data(self, data_path):
+    def load_data(self, data_path, timestamps=1):
         state_size = self.state_size
         action_size = self.action_size
-        data = pd.read_csv(data_path, header=None, skiprows=1, names=np.arange(0, 1+state_size+action_size, 1)).values
+        data = pd.read_csv(data_path, header=None, skiprows=1,
+                           names=np.arange(0, 1 + state_size + action_size, 1)).values
         ep_ids = data[:, 0]  # id of episodes
         states = data[:, 1:1 + state_size]  # x_data
         actions = data[:, state_size + 1:state_size + action_size + 1]  # t_data
@@ -111,12 +110,37 @@ class DQNAgent:
                 del states
                 states = states_shaped
                 del states_shaped
-        pass
+
+        sarsa = list()
+        sample_ids = rnd.choice(np.arange(len(ep_ids) - 1), min(self.memory_size, len(ep_ids) - 1))
+
+        for idx in sample_ids:
+            state = deque(maxlen=timestamps)
+            cur_ep_id = ep_ids[idx]
+            if cur_ep_id != ep_ids[idx + 1]:
+                continue
+            for j in range(idx - timestamps + 1, idx):
+                if j < 0 or ep_ids[j] != cur_ep_id:
+                    state.append(np.zeros(self.state_size))
+                else:
+                    state.append(states(j))
+            state.append(states[idx])
+            act = np.argmax(actions[idx])
+            rwd = actions[idx][act]
+            cur_state = np.array(state)
+            state.append(states[idx + 1])
+            next_state = np.array(state)
+            sarsa.append((cur_state, act, rwd, next_state))
+        for s in sarsa:
+            self.remember(s)
+
+        print("data loaded")
+
 
 def learning_episodes(env, model, dataset=None, n=100, timestamps=1):
     agent = DQNAgent(model)
     if dataset is not None:
-        agent.load_data(dataset)
+        agent.load_data(dataset, timestamps=timestamps)
     rewards = list()
     means = list()
 
@@ -163,14 +187,13 @@ def episode(env, agent, timestamps=1, render=True):
         if done:
             # print('Total reward: {}'.format(total_reward))
             return total_reward
-    pass
+    return total_reward
 
 
 def build_model():
     model = Sequential()
-    model.add(Dense(150, input_dim=8, activation='relu'))
-    model.add(Dense(120, activation='relu'))
-    model.add(Dense(4, activation='linear'))
+    model.add(Dense(20, input_dim=4, activation='relu'))
+    model.add(Dense(2, activation='linear'))
     model.compile(loss="mse", optimizer="adam", metrics=['accuracy'])
     print(model.summary())
     return model
@@ -178,14 +201,15 @@ def build_model():
 
 def build_rnn_model():
     model = Sequential()
-    model.add(SimpleRNN(20, input_dim=8, activation='relu'))
+    model.add(SimpleRNN(20, input_dim=4, activation='relu'))
     model.add(Dense(2, activation='linear'))
     model.compile(loss="mse", optimizer="adam", metrics=['accuracy'])
     print(model.summary())
     return model
 
+
 def load_model(name):
-    file_path = "C:\\wspace\\data\\nn_tests\\"
+    file_path = "D:\\wspace\\data\\nn_tests\\"
     json_file = open("{}{}.json".format(file_path, name), 'r')
     loaded_model_json = json_file.read()
     json_file.close()
@@ -195,10 +219,11 @@ def load_model(name):
     print("Loaded model from disk")
     return loaded_model
 
+
 if __name__ == "__main__":
     # env = gym.make("LunarLander-v2")
-    env = gym.make("LunarLander-v2")
-    # model_name = "cartpole_random"
+    env = gym.make("CartPole-v0")
+    model_name = "cartpole_random"
     timestamps = 1
     if timestamps == 1:
         model = build_model()
@@ -206,6 +231,6 @@ if __name__ == "__main__":
     else:
         model = build_rnn_model()
         # model = load_model(model_name)
-    # dataset = "C:\\wspace\\data\\nn_tests\\cartpole_sarsa_g9.csv"
-    dataset = None
-    learning_episodes(env, model, dataset=dataset, n=50000)
+    dataset = "D:\\data\\cartpole_sarsa_g9.csv"
+    # dataset = None
+    learning_episodes(env, model, timestamps=timestamps, dataset=dataset, n=10000)
