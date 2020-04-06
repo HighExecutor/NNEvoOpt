@@ -8,6 +8,7 @@ from keras.layers import Dense, SimpleRNN, LSTM
 from keras.models import Sequential
 from keras.models import model_from_json
 from keras.optimizers import adam
+import random
 
 
 def plot_history(history):
@@ -50,6 +51,7 @@ def plot_durations(rewards, means, save=False):
     plt.ylabel('Duration')
     plt.plot(rewards)
     plt.plot(means)
+    plt.ylim(-400, 400)
     if save:
         plt.savefig("C:\\wspace\\data\\nn_tests\\{}.png".format("last_learn"))
     plt.pause(0.01)
@@ -57,17 +59,17 @@ def plot_durations(rewards, means, save=False):
 
 class DQNAgent:
     def __init__(self, model, timestamps=1):
-        self.memory_size = 500000
+        self.memory_size = 100000
         self.memory = deque(maxlen=self.memory_size)
-        self.gamma = 0.9  # future reward discount
+        self.gamma = 0.99  # future reward discount
         # Exploration parameters
-        self.explore_start = 0.6  # exploration probability at start
-        self.explore_stop = 0.001  # minimum exploration probability
-        self.explore_steps = 500  # exponential decay rate for exploration prob
+        self.explore_start = 1.0  # exploration probability at start
+        self.explore_stop = 0.01  # minimum exploration probability
+        self.explore_steps = 50  # exponential decay rate for exploration prob
         self.explore_decay = (self.explore_start - self.explore_stop) / self.explore_steps
         self.explore = self.explore_start
         # Memory parameters
-        self.batch_size = 1024
+        self.batch_size = 64
         self.model = model
         self.action_size = list(model.output_shape)[-1]
         self.state_size = list(model.input_shape)[-1]
@@ -87,37 +89,61 @@ class DQNAgent:
 
     def converge_explore(self):
         if self.explore > self.explore_stop:
+        #     self.explore *= 0.996
             self.explore -= self.explore_decay
 
     def remember(self, sars):
         self.memory.append(sars)
 
+    # def replay(self, epochs=1, verbose=0):
+    #     if len(self.memory) < self.batch_size:
+    #         return
+    #     # Replay
+    #     if self.timestamps == 1:
+    #         inputs = np.zeros((self.batch_size, self.state_size), dtype=np.float32)
+    #     else:
+    #         inputs = np.zeros((self.batch_size, self.timestamps, self.state_size), dtype=np.float32)
+    #     targets = np.zeros((self.batch_size, self.action_size), dtype=np.float32)
+    #     minibatch = self.sample()
+    #     for i, (state_b, action_b, reward_b, next_state_b, done) in enumerate(minibatch):
+    #         inputs[i] = state_b
+    #         # target = reward_b
+    #         # if not (next_state_b == np.zeros(state_b.shape)).all():
+    #         target_Q = self.model.predict(next_state_b)[0]
+    #         target = reward_b + self.gamma * np.amax(target_Q) * (1 - done)
+    #         targets[i] = self.model.predict(state_b)
+    #         targets[i][action_b] = target
+    #     history = self.model.fit(inputs, targets, epochs=epochs, verbose=verbose)
+    #     return history
+
     def replay(self, epochs=1, verbose=0):
         if len(self.memory) < self.batch_size:
             return
-        # Replay
-        if self.timestamps == 1:
-            inputs = np.zeros((self.batch_size, self.state_size))
-        else:
-            inputs = np.zeros((self.batch_size, self.timestamps, self.state_size))
-        targets = np.zeros((self.batch_size, self.action_size))
-        minibatch = self.sample()
-        for i, (state_b, action_b, reward_b, next_state_b, done) in enumerate(minibatch):
-            inputs[i:i + 1] = state_b
-            target = reward_b
-            if not (next_state_b == np.zeros(state_b.shape)).all():
-                target_Q = self.model.predict(next_state_b)[0]
-                target = reward_b + self.gamma * np.amax(target_Q) * (1 - done)
-            targets[i] = self.model.predict(state_b)
-            targets[i][action_b] = target
-        history = self.model.fit(inputs, targets, epochs=epochs, verbose=verbose)
+
+        minibatch = random.sample(self.memory, self.batch_size)
+        states = np.array([i[0] for i in minibatch])
+        actions = np.array([i[1] for i in minibatch])
+        rewards = np.array([i[2] for i in minibatch])
+        next_states = np.array([i[3] for i in minibatch])
+        dones = np.array([i[4] for i in minibatch])
+
+        states = np.squeeze(states)
+        next_states = np.squeeze(next_states)
+
+        targets = rewards + self.gamma*(np.amax(self.model.predict_on_batch(next_states), axis=1))*(1-dones)
+        targets_full = self.model.predict_on_batch(states)
+        ind = np.array([i for i in range(self.batch_size)])
+        targets_full[[ind], [actions]] = targets
+
+        history = self.model.fit(states, targets_full, epochs=epochs, verbose=verbose)
         return history
 
     def sample(self):
-        idx = np.random.choice(np.arange(len(self.memory)),
-                               size=self.batch_size,
-                               replace=False)
-        return [self.memory[ii] for ii in idx]
+        return random.sample(self.memory, self.batch_size)
+        # idx = np.random.choice(np.arange(len(self.memory)),
+        #                        size=self.batch_size,
+        #                        replace=False)
+        # return [self.memory[ii] for ii in idx]
 
     def load_raw_data(self, data_path):
         timestamps = self.timestamps
@@ -269,10 +295,10 @@ def learning_episodes(env, agent, n=100, timestamps=1):
 
     plt.ion()
     for ep in range(n):
-        print("Ep {}".format(ep))
+        print("Ep {}, explore = {}".format(ep, agent.explore))
         reward = episode(env, agent, timestamps)
         rewards.append(reward)
-        agent.replay()
+        # agent.replay(epochs=1)
         agent.converge_explore()
         # Take 100 episode averages and plot them too
         if len(rewards) > 100:
@@ -293,13 +319,15 @@ def episode(env, agent, timestamps=1, render=True, remember=True):
     state = deque(maxlen=timestamps)
     for _ in range(timestamps - 1):
         state.append(np.zeros(state_size))
+    # env_state = np.append(env.reset(), 1.0)
     state.append(env.reset())
     env_name = env.spec._env_name
 
     total_reward = 0
     t = 0
-    max_steps = 1000
+    max_steps = 3000
     penalty_steps = 500
+    gaz = 1.0
     while t < max_steps:
         t += 1
         if render:
@@ -312,8 +340,8 @@ def episode(env, agent, timestamps=1, render=True, remember=True):
             action = agent.act(state)
         # Take action, get new state and reward
         new_state, reward, done, _ = env.step(action)
-        if env_name == "LunarLander" and t > penalty_steps and action > 0:
-            reward -= (t / penalty_steps)
+        # if env_name == "LunarLander" and t > penalty_steps and action > 0:
+        #     reward -= (t / penalty_steps)
         # print("step = {}; Reward = {}, done = {}".format(t, reward, done))
         total_reward += reward
         cur_state = np.array(state)
@@ -325,7 +353,11 @@ def episode(env, agent, timestamps=1, render=True, remember=True):
                 agent.remember((cur_state.reshape((1, timestamps, state_size)), action, reward,
                                 np.array(state).reshape((1, timestamps, state_size)), done))
 
+        agent.replay(epochs=1)
+        # agent.converge_explore()
+
         if done:
+            print("steps = {}; Reward = {}, done = {}".format(t, total_reward, done))
             return total_reward
 
 
@@ -365,7 +397,8 @@ def build_model(input, output):
 
 def build_rnn_model(input, output):
     model = Sequential()
-    model.add(SimpleRNN(128, input_dim=input, activation='relu'))
+    model.add(SimpleRNN(150, input_dim=input, activation='relu'))
+    model.add(Dense(120, activation='relu'))
     model.add(Dense(output, activation='linear'))
     model.compile(loss="mse", optimizer="adam", metrics=['accuracy'])
     print(model.summary())
@@ -387,9 +420,10 @@ def load_model(name):
 
 if __name__ == "__main__":
     env = gym.make("LunarLander-v2")
+    # env = gym.make("MountainCar-v0")
     # env = gym.make("CartPole-v0")
-    input = 8
-    output = 4
+    input = env.observation_space.shape[0]
+    output = env.action_space.n
     dataset = None
 
     timestamps = 1
@@ -404,10 +438,10 @@ if __name__ == "__main__":
     dataset = "C:\\wspace\\data\\nn_tests\\lunarlander\\lunarlander.mem"
 
     agent = DQNAgent(model, timestamps=timestamps)
-    agent.load_memory(dataset)
-    agent.replay(epochs=5)
-    agent.replay(epochs=5)
-    agent.replay(epochs=5)
-    agent.replay(epochs=5)
+    # agent.load_memory(dataset)
+    # agent.replay(epochs=5)
+    # agent.replay(epochs=5)
+    # agent.replay(epochs=5)
+    # agent.replay(epochs=5)
     learning_episodes(env, agent, timestamps=timestamps, n=2000)
     # train_from_memory(env, model, datapath=dataset, timestamps=timestamps, n=1000)
