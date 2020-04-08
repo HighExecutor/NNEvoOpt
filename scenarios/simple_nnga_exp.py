@@ -55,7 +55,7 @@ class SimpleNNGAExperiment:
         print("Best = {}".format(hof[0]))
 
 if __name__ == "__main__":
-    from problems.cart_pole_problem import CartPoleProblem
+    from problems.cartpole_problem import CartPoleProblem
 
     problem = CartPoleProblem()
     scenario = SimpleNNGAExperiment(problem)

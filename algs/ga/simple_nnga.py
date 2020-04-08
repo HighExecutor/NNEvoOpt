@@ -3,12 +3,10 @@ import numpy.random as rnd
 from deap import creator
 
 
-
 class SimpleNNGA:
     def __init__(self, max_layers, layer_options):
         self.max_layers = max_layers
         self.layer_options = layer_options
-
 
     def individual(self):
         return rnd.choice(self.layer_options, rnd.randint(1, self.max_layers))
@@ -21,17 +19,20 @@ class SimpleNNGA:
             options.append(self.mut1)
         selected_mutation = rnd.choice(options, 1)[0]
         idx = rnd.randint(len(solution))
-        selected_mutation(solution, idx)
+        solution = selected_mutation(solution, idx)
         return solution,
 
     def mut1(self, solution, idx):
         solution = np.insert(solution, idx, rnd.choice(self.layer_options, 1))
+        return solution
 
     def mut2(self, solution, idx):
         solution[idx] = rnd.choice(self.layer_options, 1)
+        return solution
 
     def mut3(self, solution, idx):
         solution = np.delete(solution, idx)
+        return solution
 
     def crossover(self, sol1, sol2):
         l1 = len(sol1)
@@ -56,6 +57,7 @@ class SimpleNNGA:
         c2 = creator.Individual(c2)
         return c1, c2
 
+
 if __name__ == "__main__":
     alg = SimpleNNGA(5, [16, 32, 64, 128, 256])
     s1 = alg.individual()
@@ -63,7 +65,7 @@ if __name__ == "__main__":
     s3 = alg.individual()
 
     c1, c2 = alg.crossover(s1, s2)
-    from problems.cart_pole_problem import CartPoleProblem
+    from problems.cartpole_problem import CartPoleProblem
 
     problem = CartPoleProblem()
     print("s1")
