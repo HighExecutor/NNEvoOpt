@@ -12,7 +12,7 @@ import random
 
 class DQNAgent:
     def __init__(self):
-        self.memory_size = 100000
+        self.memory_size = 50000
         self.memory = deque(maxlen=self.memory_size)
         self.gamma = 0.99  # future reward discount
         # Exploration parameters
@@ -98,7 +98,7 @@ class DQNAgent:
         assert file_timestamps == timestamps
         i = 1
         while i < len(lines):
-            if "step" in lines[i]:
+            if "sars" in lines[i]:
                 i += 1
                 continue
             if timestamps == 1:
