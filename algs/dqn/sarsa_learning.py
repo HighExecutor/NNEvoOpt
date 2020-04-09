@@ -74,31 +74,38 @@ def episode(problem, agent, render=False, remember=True):
         # agent.converge_explore()
 
         if done:
-            print("steps = {}; Reward = {}, done = {}".format(t, total_reward, done))
+            # print("steps = {}; Reward = {}, done = {}".format(t, total_reward, done))
             return total_reward
 
 
-def train_from_memory(problem, agent, datapath, n=100):
+def train_from_memory(problem, agent, datapath, n=100, plots=0):
     agent.load_memory(datapath)
     agent.explore_start = 0.0
     agent.explore_stop = 0.0
     agent.batch_size = 1024
+    render = plots == 3
 
     history = dict()
     history['loss'] = list()
     history['acc'] = list()
     history['reward'] = list()
-    plt.ion()
+    if plots > 1:
+        plt.ion()
     for i in range(n):
-        e_history = agent.replay(verbose=1, epochs=1)
-        reward = episode(problem, agent,render=False, remember=False)
+        e_history = agent.replay(verbose=0, epochs=1)
+        reward = episode(problem, agent, render=render, remember=False)
         history['loss'].append(e_history.history['loss'][0])
         history['acc'].append(e_history.history['acc'][0])
         history['reward'].append(reward)
-        # plot_history(history)
-    plt.ioff()
-    plot_history(history)
-    plt.show()
+        if plots > 1:
+            plot_history(history)
+    if plots > 1:
+        plt.ioff()
+    if plots > 0:
+        plot_history(history)
+        plt.show()
+    return history
+
 
 # sarsa learning
 if __name__ == "__main__":
@@ -107,5 +114,5 @@ if __name__ == "__main__":
     layers = [20, 12]
     agent = DQNAgent()
     agent.build_model(problem.state_size, problem.action_size, layers, timestamps)
-    learning_episodes(problem, agent, n=2000)
-    train_from_memory(problem, agent, datapath="D:\\data\\cartpole\\last_memory.mem", n=100)
+    # learning_episodes(problem, agent, n=2000)
+    train_from_memory(problem, agent, datapath="D:\\data\\cartpole\\last_memory.mem", n=100, plots=1)

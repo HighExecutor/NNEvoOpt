@@ -42,7 +42,7 @@ class DQNAgent:
                 model.add(SimpleRNN(layers[i], activation='relu'))
         model.add(Dense(action_size, activation='linear'))
         model.compile(loss="mse", optimizer=adam(lr=0.001), metrics=['accuracy'])
-        print(model.summary())
+        # print(model.summary())
         self.model = model
 
     def act(self, state):
