@@ -1,17 +1,19 @@
 import numpy as np
 import numpy.random as rnd
 from deap import creator
+from multiprocessing import Pool
+from deap import tools, base
+from algs.ga.ga_scheme import eaMuPlusLambda
+from algs.dqn.sarsa_actor import DQNAgent
+from algs.dqn.sarsa_learning import train_from_memory
 
+creator.create("BaseFitness", base.Fitness, weights=(1.0, ))
+creator.create("Individual", np.ndarray, fitness=creator.BaseFitness)
 
 
 class SimpleNNGA:
-    def __init__(self, max_layers, layer_options):
-        self.max_layers = max_layers
-        self.layer_options = layer_options
-
-
     def individual(self):
-        return rnd.choice(self.layer_options, rnd.randint(1, self.max_layers))
+        return list(rnd.randint(low=self.min_layer_size, high=self.max_layer_size, size=rnd.randint(1, self.max_layers)))
 
     def mutation(self, solution):
         options = [self.mut2]
@@ -21,17 +23,20 @@ class SimpleNNGA:
             options.append(self.mut1)
         selected_mutation = rnd.choice(options, 1)[0]
         idx = rnd.randint(len(solution))
-        selected_mutation(solution, idx)
-        return solution,
+        solution = selected_mutation(solution, idx)
+        return creator.Individual(list(solution)),
 
     def mut1(self, solution, idx):
-        solution = np.insert(solution, idx, rnd.choice(self.layer_options, 1))
+        solution = np.insert(solution, idx, rnd.randint(self.min_layer_size, self.max_layer_size))
+        return solution
 
     def mut2(self, solution, idx):
-        solution[idx] = rnd.choice(self.layer_options, 1)
+        solution[idx] = np.clip(solution[idx] + rnd.randint(-32, 32), self.min_layer_size, self.max_layer_size)
+        return solution
 
     def mut3(self, solution, idx):
         solution = np.delete(solution, idx)
+        return solution
 
     def crossover(self, sol1, sol2):
         l1 = len(sol1)
@@ -56,26 +61,68 @@ class SimpleNNGA:
         c2 = creator.Individual(c2)
         return c1, c2
 
-if __name__ == "__main__":
-    alg = SimpleNNGA(5, [16, 32, 64, 128, 256])
-    s1 = alg.individual()
-    s2 = alg.individual()
-    s3 = alg.individual()
+    def evaluate(self, solution):
+        agent = DQNAgent()
+        agent.build_model(self.problem.state_size, self.problem.action_size, solution, 1)
+        history = train_from_memory(problem, agent, datapath=self.memory_path, n=10, plots=0)
+        acc = np.mean(history['acc'][-5:])
+        loss = np.mean(history['loss'][-5:])
+        reward = np.mean(history['reward'][-5:])
+        return acc,
 
-    c1, c2 = alg.crossover(s1, s2)
-    from problems.cart_pole_problem import CartPoleProblem
+    def __init__(self, max_layers, max_layer_size, min_layer_size, problem, memory_path):
+        self.max_layers = max_layers
+        self.max_layer_size = max_layer_size
+        self.min_layer_size = min_layer_size
+        self.memory_path = memory_path
+
+        self.pop_size = 5
+        self.iterations = 10
+        self.mut_prob = 0.4
+        self.cross_prob = 0.4
+
+        self.problem = problem
+        self.external_solution = None
+
+        self.engine = base.Toolbox()
+        # self.pool = Pool(5)
+        # self.engine.register("map", self.pool.map)
+        self.engine.register("map", map)
+
+        self.engine.register("individual", tools.initIterate, creator.Individual, self.individual)
+        self.engine.register("population", tools.initRepeat, list, self.engine.individual, self.pop_size)
+        self.engine.register("mate", self.crossover)
+        self.engine.register("mutate", self.mutation)
+        self.engine.register("select", tools.selRoulette)
+        self.engine.register("evaluate", self.evaluate)
+
+    def run(self):
+        pop = self.engine.population()
+
+        def similar(x, y):
+            if len(x) != len(y):
+                return False
+            return all(x == y)
+
+        hof = tools.HallOfFame(1, similar)
+        stats = tools.Statistics(lambda ind: ind.fitness.values)
+        stats.register("avg", np.mean)
+        stats.register("std", np.std)
+        stats.register("min", np.min)
+        stats.register("max", np.max)
+
+        pop, log = eaMuPlusLambda(pop, self.engine, self.pop_size, self.pop_size, cxpb=self.cross_prob,
+                                  mutpb=self.mut_prob, ngen=self.iterations,
+                                  stats=stats, halloffame=hof, verbose=True)
+        print(log)
+        print("Best = {}".format(hof[0]))
+        return pop, log
+
+
+if __name__ == "__main__":
+    from problems.cartpole_problem import CartPoleProblem
 
     problem = CartPoleProblem()
-    print("s1")
-    problem.evaluate(s1)
-    print("s2")
-    problem.evaluate(s2)
-    print("s3")
-    problem.evaluate(s3)
-    alg.mutation(s3)
-    print("mutated s3")
-    problem.evaluate(s3)
-    print("c1")
-    problem.evaluate(c1)
-    print("c2")
-    problem.evaluate(c2)
+    memory_path = "D:\\data\\cartpole\\last_memory.mem"
+    alg = SimpleNNGA(5, 128, 8, problem, memory_path)
+    pop, log = alg.run()
