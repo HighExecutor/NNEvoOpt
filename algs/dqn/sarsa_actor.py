@@ -18,7 +18,7 @@ class DQNAgent:
         # Exploration parameters
         self.explore_start = 1.0  # exploration probability at start
         self.explore_stop = 0.01  # minimum exploration probability
-        self.explore_steps = 100  # exponential decay rate for exploration prob
+        self.explore_steps = 50  # exponential decay rate for exploration prob
         self.explore_decay = (self.explore_start - self.explore_stop) / self.explore_steps
         self.explore = self.explore_start
         # Memory parameters
