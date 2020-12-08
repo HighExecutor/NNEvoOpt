@@ -64,7 +64,7 @@ class SimpleNNGA:
     def evaluate(self, solution):
         agent = DQNAgent()
         agent.build_model(self.problem.state_size, self.problem.action_size, solution, 1)
-        history = train_from_memory(problem, agent, datapath=self.memory_path, n=10, plots=0)
+        history = train_from_memory(problem, agent, datapath=self.memory_path, n=50, plots=0)
         acc = np.mean(history['acc'][-5:])
         loss = np.mean(history['loss'][-5:])
         reward = np.mean(history['reward'][-5:])
@@ -76,8 +76,8 @@ class SimpleNNGA:
         self.min_layer_size = min_layer_size
         self.memory_path = memory_path
 
-        self.pop_size = 5
-        self.iterations = 10
+        self.pop_size = 10
+        self.iterations = 20
         self.mut_prob = 0.4
         self.cross_prob = 0.4
 
@@ -85,7 +85,7 @@ class SimpleNNGA:
         self.external_solution = None
 
         self.engine = base.Toolbox()
-        # self.pool = Pool(5)
+        # self.pool = Pool(4)
         # self.engine.register("map", self.pool.map)
         self.engine.register("map", map)
 

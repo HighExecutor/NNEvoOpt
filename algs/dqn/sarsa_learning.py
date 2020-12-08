@@ -82,7 +82,7 @@ def train_from_memory(problem, agent, datapath, n=100, plots=0):
     agent.load_memory(datapath)
     agent.explore_start = 0.0
     agent.explore_stop = 0.0
-    agent.batch_size = 1024
+    agent.batch_size = 512
     render = plots == 3
 
     history = dict()
